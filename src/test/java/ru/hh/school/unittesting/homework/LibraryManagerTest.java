@@ -6,8 +6,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 class LibraryManagerTest {
   private LibraryManager libraryManager;
@@ -27,6 +26,7 @@ class LibraryManagerTest {
   void borrowBookByNotActiveUser() {
     when(userService.isUserActive("001")).thenReturn(false);
     boolean result = libraryManager.borrowBook("054", "001");
+    verify(notificationService).notifyUser("001", "Your account is not active.");
     assertFalse(result);
   }
 
@@ -42,7 +42,10 @@ class LibraryManagerTest {
   void borrowBookSufficientSingleBooks() {
     when(userService.isUserActive("001")).thenReturn(true);
     libraryManager.addBook("053", 1);
+    assertEquals(libraryManager.getAvailableCopies("053"), 1);
     libraryManager.borrowBook("053", "001");
+    assertEquals(libraryManager.getAvailableCopies("053"), 0);
+    verify(notificationService).notifyUser("001", "You have borrowed the book: 053");
     boolean result = libraryManager.borrowBook("053", "001");
     assertFalse(result);
   }
@@ -51,6 +54,8 @@ class LibraryManagerTest {
   void borrowBookWithSufficientBooks() {
     when(userService.isUserActive("001")).thenReturn(true);
     boolean result = libraryManager.borrowBook("054", "001");
+    assertEquals(libraryManager.getAvailableCopies("054"), 9);
+    verify(notificationService).notifyUser("001", "You have borrowed the book: 054");
     assertTrue(result);
   }
 
@@ -58,7 +63,10 @@ class LibraryManagerTest {
   void returnBorrowedBook() {
     when(userService.isUserActive("001")).thenReturn(true);
     libraryManager.borrowBook("054", "001");
+    assertEquals(libraryManager.getAvailableCopies("054"), 9);
     boolean result = libraryManager.returnBook("054", "001");
+    verify(notificationService).notifyUser("001", "You have returned the book: 054");
+    assertEquals(libraryManager.getAvailableCopies("054"), 10);
     assertTrue(result);
   }
 
@@ -73,7 +81,6 @@ class LibraryManagerTest {
   @Test
   void returnNotBorrowedBook() {
     when(userService.isUserActive("001")).thenReturn(true);
-
     boolean result = libraryManager.returnBook("054", "001");
     assertFalse(result);
   }
@@ -90,27 +97,16 @@ class LibraryManagerTest {
         () -> libraryManager.calculateDynamicLateFee(-10, true, true));
   }
 
-  @Test
-  void calculateDynamicLateFeeBestseller() {
-    double fee = libraryManager.calculateDynamicLateFee(2, true, false);
-    assertEquals(1.5, fee);
-  }
-
-  @Test
-  void calculateDynamicLateFeePremiumMember() {
-    double fee = libraryManager.calculateDynamicLateFee(2, false, true);
-    assertEquals(0.8, fee);
-  }
-
   @ParameterizedTest
   @CsvSource({
       "4, true, false, 3",
       "20, true, true, 12",
-      "10, true, true, 6",
-      "3, false, true, 1.2"
+      "10, false, false, 5",
+      "3, false, true, 1.2",
+      "0, false, false, 0"
   })
-  void calculateDynamicLateFee(int overdueDays, boolean isBestseller, boolean isPremiumMember,double expectedFee) {
-    double fee = libraryManager.calculateDynamicLateFee(overdueDays, isBestseller,isPremiumMember);
+  void calculateDynamicLateFee(int overdueDays, boolean isBestseller, boolean isPremiumMember, double expectedFee) {
+    double fee = libraryManager.calculateDynamicLateFee(overdueDays, isBestseller, isPremiumMember);
     assertEquals(expectedFee, fee);
   }
 
